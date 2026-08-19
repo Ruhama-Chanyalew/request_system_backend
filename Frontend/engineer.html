@@ -1449,6 +1449,30 @@ const token =
         "access_token"
     );
 
+
+/* =========================================
+   LOGOUT
+========================================= */
+
+const logoutButton =
+    document.getElementById("logoutButton");
+
+if (logoutButton) {
+
+    logoutButton.addEventListener("click", function(event) {
+
+        event.preventDefault();
+
+        // Remove login information
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
+
+        // Go back to login page
+        window.location.href = "login.html";
+
+    });
+
+}
 /* =========================================
    NOTIFICATIONS
 ========================================= */
@@ -2366,6 +2390,8 @@ async function submitCompleteRequest(
         alert(
             "Request completed successfully."
         );
+
+        
 
 
         loadAvailableRequests();

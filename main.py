@@ -25,9 +25,15 @@ app = FastAPI()
 # CORS
 # =========================
 
+frontend_url = os.getenv(
+    "FRONTEND_URL",
+    "http://127.0.0.1:5500"
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        frontend_url,
         "http://127.0.0.1:5500",
         "http://localhost:5500"
     ],
@@ -42,17 +48,18 @@ app.add_middleware(
 
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="newpassword123",
-        database="request_system"
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT", 3306)),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME")
     )
 
 # =========================================================
 # JWT CONFIGURATION
 # =========================================================
 
-SECRET_KEY = "mysecretkey"
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
