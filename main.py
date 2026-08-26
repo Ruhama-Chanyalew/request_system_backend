@@ -56,6 +56,7 @@ def get_db():
         ssl_ca=os.getenv("DB_SSL_CA")
     )
 
+
 # =========================================================
 # JWT CONFIGURATION
 # =========================================================
@@ -836,6 +837,144 @@ Data Engineering Division
 
     }
 
+# =========================================================
+# MANAGER TAKE REQUEST
+# =========================================================
+
+@app.post("/manager/accept/{request_id}")
+def manager_accept_request(
+    request_id: int,
+    user=Depends(get_current_user)
+):
+
+    if user["role"].lower() != "manager":
+
+        raise HTTPException(
+            status_code=403,
+            detail="Only managers can take requests"
+        )
+
+    db = get_db()
+    cursor = db.cursor()
+
+    # DEBUG
+    cursor.execute("""
+        SELECT request_id, status, assigned_to
+        FROM Requests
+        WHERE request_id = %s
+    """, (request_id,))
+
+    debug_request = cursor.fetchone()
+
+    print("====================================")
+    print("MANAGER ACCEPT DEBUG")
+    print("Request ID:", request_id)
+    print("Database sees:", debug_request)
+    print("DB HOST:", os.getenv("DB_HOST"))
+    print("DB PORT:", os.getenv("DB_PORT"))
+    print("DB NAME:", os.getenv("DB_NAME"))
+    print("====================================")
+
+    now = datetime.now()
+
+    try:
+
+        cursor.execute("""
+            UPDATE Requests
+            SET
+                assigned_to = %s,
+                status = 'In Progress',
+                updated_at = %s
+            WHERE request_id = %s
+              AND assigned_to IS NULL
+              AND status = 'Pending'
+        """, (
+            int(user["user_id"]),
+            now,
+            int(request_id)
+        ))
+
+        if cursor.rowcount == 0:
+
+            db.rollback()
+
+            raise HTTPException(
+                status_code=409,
+                detail="Request is already assigned or is no longer pending"
+            )
+
+        cursor.execute("""
+            INSERT INTO Assignments
+            (
+                request_id,
+                assigned_by,
+                assigned_to,
+                assignment_type,
+                assigned_at,
+                notes
+            )
+            VALUES
+            (%s, %s, %s, %s, %s, %s)
+        """, (
+            request_id,
+            user["user_id"],
+            user["user_id"],
+            "Self",
+            now,
+            "Taken by manager"
+        ))
+
+        cursor.execute("""
+            INSERT INTO Notifications
+            (
+                request_id,
+                user_id,
+                message,
+                type,
+                channel,
+                is_read
+            )
+            VALUES
+            (%s, %s, %s, %s, %s, %s)
+        """, (
+            request_id,
+            user["user_id"],
+            f"You took request {request_id}.",
+            "Assignment",
+            "System",
+            False
+        ))
+
+        db.commit()
+
+    except HTTPException:
+
+        db.rollback()
+        raise
+
+    except Exception as e:
+
+        db.rollback()
+
+        print("❌ MANAGER TAKE REQUEST ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to take request"
+        )
+
+    finally:
+
+        cursor.close()
+        db.close()
+
+   return {
+    "message": "Request accepted by you",
+    "request_id": request_id,
+    "assigned_to": user["user_id"],
+    "status": "In Progress"
+}
+
 
 # =========================================================
 # 6. ENGINEER VIEW ASSIGNED REQUESTS
@@ -1207,11 +1346,11 @@ def complete_request(
     # CHECK ROLE
     # -----------------------------------------------------
 
-    if user["role"].lower() != "engineer":
+    if user["role"].lower() not in ["engineer", "manager"]:
 
         raise HTTPException(
             status_code=403,
-            detail="Only engineers can complete requests"
+            detail="Only engineers or managers can complete requests"
         )
 
     db = get_db()
