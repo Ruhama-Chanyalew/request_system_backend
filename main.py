@@ -856,25 +856,6 @@ def manager_accept_request(
 
     db = get_db()
     cursor = db.cursor()
-
-    # DEBUG
-    cursor.execute("""
-        SELECT request_id, status, assigned_to
-        FROM Requests
-        WHERE request_id = %s
-    """, (request_id,))
-
-    debug_request = cursor.fetchone()
-
-    print("====================================")
-    print("MANAGER ACCEPT DEBUG")
-    print("Request ID:", request_id)
-    print("Database sees:", debug_request)
-    print("DB HOST:", os.getenv("DB_HOST"))
-    print("DB PORT:", os.getenv("DB_PORT"))
-    print("DB NAME:", os.getenv("DB_NAME"))
-    print("====================================")
-
     now = datetime.now()
 
     try:
@@ -968,12 +949,12 @@ def manager_accept_request(
         cursor.close()
         db.close()
 
-   return {
-    "message": "Request accepted by you",
-    "request_id": request_id,
-    "assigned_to": user["user_id"],
-    "status": "In Progress"
-}
+    return {
+        "message": "Request accepted by you",
+        "request_id": request_id,
+        "assigned_to": user["user_id"],
+        "status": "In Progress"
+    }
 
 
 # =========================================================
