@@ -956,6 +956,276 @@ def manager_accept_request(
         "status": "In Progress"
     }
 
+# =========================================================
+# MANAGER REPORTS & ANALYTICS
+# =========================================================
+
+@app.get("/manager/reports")
+def manager_reports(
+    user=Depends(get_current_user)
+):
+
+    # -----------------------------------------------------
+    # CHECK MANAGER ROLE
+    # -----------------------------------------------------
+
+    if user["role"].lower() != "manager":
+
+        raise HTTPException(
+            status_code=403,
+            detail="Only managers can view reports"
+        )
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    try:
+
+        # =================================================
+        # 1. SYSTEM OVERVIEW
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total_requests,
+                SUM(status = 'Pending') AS pending,
+                SUM(status = 'In Progress') AS in_progress,
+                SUM(status = 'Completed') AS completed
+            FROM Requests
+        """)
+
+        overview = cursor.fetchone()
+
+
+        # =================================================
+        # 2. USER COUNTS
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                SUM(LOWER(role) = 'requester') AS total_requesters,
+                SUM(LOWER(role) = 'engineer') AS total_engineers,
+                SUM(LOWER(role) = 'manager') AS total_managers
+            FROM Users
+        """)
+
+        user_counts = cursor.fetchone()
+
+
+        # =================================================
+        # 3. REQUESTER ACTIVITY
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                u.user_id,
+                u.full_name,
+                d.dept_name,
+
+                COUNT(r.request_id) AS total_requests,
+
+                SUM(r.status = 'Pending') AS pending,
+
+                SUM(r.status = 'In Progress') AS in_progress,
+
+                SUM(r.status = 'Completed') AS completed
+
+            FROM Users u
+
+            LEFT JOIN Departments d
+                ON u.dept_id = d.dept_id
+
+            LEFT JOIN Requests r
+                ON u.user_id = r.requester_id
+
+            WHERE LOWER(u.role) = 'requester'
+
+            GROUP BY
+                u.user_id,
+                u.full_name,
+                d.dept_name
+
+            ORDER BY total_requests DESC
+        """)
+
+        requesters = cursor.fetchall()
+
+
+        # =================================================
+        # 4. AVERAGE REQUESTS PER REQUESTER
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                ROUND(
+                    COUNT(*) /
+                    NULLIF(COUNT(DISTINCT requester_id), 0),
+                    2
+                ) AS average_requests_per_requester
+
+            FROM Requests
+        """)
+
+        average_requests = cursor.fetchone()
+
+
+        # =================================================
+        # 5. ENGINEER WORKLOAD
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                u.user_id,
+                u.full_name,
+
+                COUNT(r.request_id) AS assigned,
+
+                SUM(r.status = 'Pending') AS pending,
+
+                SUM(r.status = 'In Progress') AS in_progress,
+
+                SUM(r.status = 'Completed') AS completed
+
+            FROM Users u
+
+            LEFT JOIN Requests r
+                ON u.user_id = r.assigned_to
+
+            WHERE LOWER(u.role) = 'engineer'
+
+            GROUP BY
+                u.user_id,
+                u.full_name
+
+            ORDER BY assigned DESC
+        """)
+
+        engineers = cursor.fetchall()
+
+
+        # =================================================
+        # 6. DEPARTMENT ACTIVITY
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                d.dept_name,
+                COUNT(r.request_id) AS total_requests
+
+            FROM Departments d
+
+            LEFT JOIN Requests r
+                ON d.dept_id = r.dept_id
+
+            GROUP BY
+                d.dept_id,
+                d.dept_name
+
+            ORDER BY total_requests DESC
+        """)
+
+        departments = cursor.fetchall()
+
+
+        # =================================================
+        # 7. REQUESTS BY URGENCY
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                urgency,
+                COUNT(*) AS total_requests
+
+            FROM Requests
+
+            GROUP BY urgency
+
+            ORDER BY total_requests DESC
+        """)
+
+        urgency = cursor.fetchall()
+
+
+        # =================================================
+        # 8. REQUESTS BY FORMAT
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                format,
+                COUNT(*) AS total_requests
+
+            FROM Requests
+
+            GROUP BY format
+
+            ORDER BY total_requests DESC
+        """)
+
+        formats = cursor.fetchall()
+
+
+        # =================================================
+        # 9. MONTHLY REQUEST TREND
+        # =================================================
+
+        cursor.execute("""
+            SELECT
+                DATE_FORMAT(created_at, '%Y-%m') AS month,
+                COUNT(*) AS total_requests
+
+            FROM Requests
+
+            GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+
+            ORDER BY month
+        """)
+
+        monthly = cursor.fetchall()
+
+
+        # =================================================
+        # RETURN COMPLETE REPORT
+        # =================================================
+
+        return {
+
+            "overview": overview,
+
+            "user_counts": user_counts,
+
+            "average_requests": average_requests,
+
+            "requesters": requesters,
+
+            "engineers": engineers,
+
+            "departments": departments,
+
+            "urgency": urgency,
+
+            "formats": formats,
+
+            "monthly": monthly
+
+        }
+
+
+    except Exception as e:
+
+        print("❌ MANAGER REPORT ERROR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate manager report"
+        )
+
+
+    finally:
+
+        cursor.close()
+        db.close()
+
 
 # =========================================================
 # 6. ENGINEER VIEW ASSIGNED REQUESTS
