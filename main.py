@@ -2,7 +2,7 @@
 # source venv/bin/activate
 # pip install fastapi uvicorn python-jose mysql-connector-python
 # uvicorn main:app --reload
-
+#localStorage.getItem("access_token")
 
 from fastapi import FastAPI, HTTPException, Depends, Body
 from fastapi.middleware.cors import CORSMiddleware
